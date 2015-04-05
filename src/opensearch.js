@@ -14,6 +14,7 @@ function createOpenSearchProvider( osData, options ) {
 
   switch ( type ) {
     case "xml": return OpenSearchProvider.createFromXMLString( osData );
+    case "file": return OpenSearchProvider.createFromFile( osData );
     default: return Promise.reject( new Error( "Type '" + type * "' not supported!" ) );
   }
 }

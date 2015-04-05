@@ -1,9 +1,9 @@
-import xml2js from "xml2js";
-import util from "util";
-import URITemplate from "URIjs/src/URITemplate";
 import _ from "lodash";
-import fetch from "node-fetch";
+import xml2js from "xml2js";
+import URITemplate from "URIjs/src/URITemplate";
 import URI from "URIjs";
+import fetch from "node-fetch";
+import fs from "fs";
 
 var defaultOpenSearchDescription = {
   ShortName: "",
@@ -62,6 +62,43 @@ export default class OpenSearchProvider {
           resolve( new OpenSearchProvider( res.OpenSearchDescription || res.SearchPlugin) );
         }
 
+      } );
+    } );
+  }
+
+  /**
+   * Creates an instance of `OpenSearchProvider` from an XML file that represents
+   * an OpenSearchDefinition. Returns a promise resolving to the instance
+   *
+   * @param  {string}  filePath  
+   * @return {Promise}           The promise
+   */
+  static createFromFile( filePath ) {
+
+    return new Promise( (resolve, reject) => {
+
+      fs.readFile( filePath, ( err, xmlString ) => {
+
+        if( err ) {
+          reject( err );
+          return;
+        }
+
+        xml2js.parseString(
+          xmlString,
+          { mergeAttrs: true,
+            explicitArray: false,
+            charkey: "src" },
+          (err, res) => {
+
+            if( err ) {
+              reject( err );
+            } else {
+              // handling `OpenSearchDescription` as in spec 1.1 ans `SearchPlugin`, which is
+              // used by Mozilla
+              resolve( new OpenSearchProvider( res.OpenSearchDescription || res.SearchPlugin) );
+            }
+         } );
       } );
     } );
   }
@@ -150,7 +187,7 @@ export default class OpenSearchProvider {
    */
   _expandGetUrlTemplate( url, params ) {
     var template = new URI( url.template.expand( params ) );
-    template.addQuery( _.mapValues( url.Param, val => val.expand( params ) ) );
+    template.addQuery( _.mapValues( url.Param, val => decodeURIComponent(val.expand( params )) ) );
     return template.toString();
   }
 
@@ -185,7 +222,13 @@ export default class OpenSearchProvider {
       return Promise.reject( new Error("OpenSearchDefinition does not have a Url with type 'application/x-suggestions+json', which is necessary for suggestions!") );
     else
       return this._makeRequest( url, templateParams )
-        .then( res => res.json() )
+        .then( response => {
+          if (response.status >= 200 && response.status < 300) {
+              return response.json();
+            } else {
+              return Promise.reject(new Error(response.statusText));
+            }
+        } )
         .then( json => {
           // 3rd (descriptions) and 4th (query urls) element of the result are optional, but
           // we can at least add the urls
@@ -206,8 +249,9 @@ export default class OpenSearchProvider {
             });
 
             json.push( urls );
-            return json;
           }
+
+          return json;
         });
   }
 
